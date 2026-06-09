@@ -30,14 +30,36 @@ Built-in safety checks:
 
 ## One-time setup
 
-### 1. Google service account (writes to the sheet)
+### 1. Google credentials (writes to the sheet)
 
-1. In [Google Cloud Console](https://console.cloud.google.com/), create (or
-   pick) a project → **APIs & Services → Library** → enable **Google Sheets API**.
-2. **IAM & Admin → Service Accounts → Create service account** (any name,
-   no roles needed) → open it → **Keys → Add key → JSON**. A `.json` file downloads.
-3. Open the spreadsheet → **Share** → add the service account's email
-   (`...@...iam.gserviceaccount.com`) as **Editor**.
+**Option A — OAuth as your own account** (use this when org policy blocks
+service account keys):
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), signed in as
+   the account that can edit the spreadsheet, create (or pick) a project.
+2. **APIs & Services → Library** → enable **Google Sheets API**.
+3. **APIs & Services → OAuth consent screen** (a.k.a. *Google Auth Platform →
+   Branding/Audience*): choose **Internal** if offered (Workspace accounts),
+   set an app name and support email, save. Internal apps need no Google
+   verification and their tokens don't expire. If only **External** is
+   offered, finish the wizard, then under **Audience** click **Publish app**
+   (otherwise the token dies after 7 days) and add yourself as a user.
+4. **APIs & Services → Credentials → Create credentials → OAuth client ID** →
+   Application type **Desktop app** → Create. Copy the client ID and secret.
+5. On your own computer:
+
+   ```bash
+   pip install google-auth-oauthlib
+   python scripts/bootstrap_google_oauth.py
+   ```
+
+   Paste the client ID/secret, sign in in the browser window, approve, and
+   copy the printed base64 line into the `GOOGLE_OAUTH_TOKEN_B64` secret.
+
+**Option B — service account** (if key creation isn't blocked): create a
+service account, download a JSON key, share the spreadsheet with the service
+account's email as Editor, and put the JSON into the
+`GOOGLE_SERVICE_ACCOUNT_JSON` secret.
 
 ### 2. GitHub Actions secrets
 
@@ -45,7 +67,8 @@ In this repo: **Settings → Secrets and variables → Actions → New repositor
 
 | Secret | Value |
 |---|---|
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Entire contents of the downloaded JSON key file |
+| `GOOGLE_OAUTH_TOKEN_B64` | Output of `scripts/bootstrap_google_oauth.py` (Option A) |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Service account JSON key (Option B — set one or the other) |
 | `WEAVE_EMAIL` | Weave login email |
 | `WEAVE_PASSWORD` | Weave login password |
 | `WEAVE_STORAGE_STATE_B64` | *(only needed if Weave asks for MFA — see below)* |

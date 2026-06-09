@@ -72,6 +72,9 @@ jobs:
           WEAVE_EMAIL: ${{ secrets.WEAVE_EMAIL }}
           WEAVE_PASSWORD: ${{ secrets.WEAVE_PASSWORD }}
           WEAVE_STORAGE_STATE_B64: ${{ secrets.WEAVE_STORAGE_STATE_B64 }}
+          # Google credentials: OAuth token (preferred when service account
+          # keys are blocked by org policy) or a service account JSON key.
+          GOOGLE_OAUTH_TOKEN_B64: ${{ secrets.GOOGLE_OAUTH_TOKEN_B64 }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           # Optional overrides; defaults are baked into weave_bot/config.py:
           # SPREADSHEET_ID, DAILY_SUMMARY_TAB, BY_LINE_TAB, REPORT_TIMEZONE,
