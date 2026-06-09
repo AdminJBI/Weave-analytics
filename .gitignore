@@ -1,0 +1,15 @@
+# Secrets & sessions — never commit these
+.auth/
+storage_state.json
+service_account*.json
+*.pem
+.env
+
+# Run artifacts
+debug/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/

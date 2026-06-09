@@ -1,0 +1,96 @@
+name: Daily Weave call report
+
+on:
+  schedule:
+    # GitHub cron is UTC and has no DST awareness, so both possible UTC times
+    # for 6:05 AM Pacific are scheduled; a guard step keeps whichever run
+    # lands between 6 and 8 AM PT. The script is idempotent, so even if both
+    # fire, the second one is a no-op.
+    - cron: "5 13 * * *"   # 6:05 AM PDT (summer)
+    - cron: "5 14 * * *"   # 6:05 AM PST (winter)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Scrape and log only — don't write to the sheet"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weave-daily-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Skip the off-DST duplicate schedule
+        id: guard
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            H=$(TZ=America/Los_Angeles date +%H)
+            if [ "$H" != "06" ] && [ "$H" != "07" ]; then
+              echo "Current Pacific hour is $H — this is the off-DST cron (or a long delay). Skipping."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Check out repository
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      # Reuse the Weave session from the previous run so cookies stay fresh
+      # and we rarely need a full login (or a new MFA bootstrap).
+      - name: Restore saved Weave session
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: .auth/storage_state.json
+          key: weave-session-${{ github.run_id }}
+          restore-keys: |
+            weave-session-
+
+      - name: Scrape Weave and update the Google Sheet
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          WEAVE_EMAIL: ${{ secrets.WEAVE_EMAIL }}
+          WEAVE_PASSWORD: ${{ secrets.WEAVE_PASSWORD }}
+          WEAVE_STORAGE_STATE_B64: ${{ secrets.WEAVE_STORAGE_STATE_B64 }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          # Optional overrides; defaults are baked into weave_bot/config.py:
+          # SPREADSHEET_ID, DAILY_SUMMARY_TAB, BY_LINE_TAB, REPORT_TIMEZONE,
+          # STRICT_VALIDATION
+        run: |
+          python -m weave_bot.main ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: Save refreshed Weave session
+        if: always() && steps.guard.outputs.skip != 'true' && hashFiles('.auth/storage_state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .auth/storage_state.json
+          key: weave-session-${{ github.run_id }}
+
+      - name: Upload debug artifacts
+        if: failure() && steps.guard.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: weave-debug-${{ github.run_id }}
+          path: debug/
+          retention-days: 7
+          if-no-files-found: ignore
